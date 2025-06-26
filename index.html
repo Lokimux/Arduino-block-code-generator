@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Block Code Generator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f8fafc; /* Light background */
+            color: #1e293b; /* Dark text color */
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .block-palette {
+            width: 280px;
+            background-color: #ffffff;
+            border-right: 1px solid #e2e8f0;
+            padding: 1rem;
+            overflow-y: auto;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin: 0.5rem;
+        }
+        
+        .workspace {
+            flex-grow: 1;
+            background-color: #ffffff;
+            border: 2px dashed #cbd5e1;
+            margin: 0.5rem;
+            padding: 1.5rem;
+            min-height: 300px;
+            overflow-y: auto;
+            border-radius: 0.75rem;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .workspace.drag-over {
+            border-color: #6366f1;
+            background-color: #f8fafc;
+        }
+        
+        .code-output-container {
+            width: 380px;
+            background-color: #ffffff;
+            margin: 0.5rem;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .code-output-area {
+            background-color: #1e293b;
+            color: #f8fafc;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+            flex-grow: 1;
+            min-height: 200px;
+            resize: vertical;
+            border: 1px solid #334155;
+            line-height: 1.5;
+        }
+        
+        .draggable-block, .workspace-block {
+            cursor: grab;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+            color: white;
+            position: relative;
+        }
+        
+        .draggable-block {
+            opacity: 0.95;
+        }
+        
+        .draggable-block:hover {
+            opacity: 1;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        .draggable-block:active, .workspace-block:active {
+            cursor: grabbing;
+            transform: scale(0.98);
+        }
+        
+        .workspace-block {
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .workspace-block .input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        
+        .workspace-block label {
+            font-size: 0.875rem;
+            font-weight: 400;
+            flex-shrink: 0;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .workspace-block input[type="number"],
+        .workspace-block input[type="text"],
+        .workspace-block select {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+            border-radius: 0.25rem;
+            padding: 0.375rem 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            flex-grow: 1;
+            max-width: 150px;
+            transition: all 0.2s ease;
+        }
+        
+        .workspace-block input:focus,
+        .workspace-block select:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Fix for dropdown options visibility */
+        .workspace-block select option {
+            background-color: #1e293b;
+            color: white;
+        }
+        
+        .workspace-block select {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 12px 12px;
+            padding-right: 1.5rem;
+        }
+        
+        .workspace-block .remove-btn {
+            background-color: #ef4444;
+            color: white;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            line-height: 1;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+            border: 2px solid white;
+            opacity: 0;
+        }
+        
+        .workspace-block:hover .remove-btn {
+            opacity: 1;
+        }
+        
+        .workspace-block .remove-btn:hover {
+            background-color: #dc2626;
+            transform: scale(1.1);
+        }
+        
+        .drag-over-item {
+            position: relative;
+        }
+        
+        .drag-over-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #6366f1;
+            z-index: 20;
+        }
+        
+        .drag-over-item.top::before {
+            top: -1px;
+        }
+        
+        .drag-over-item.bottom::before {
+            bottom: -1px;
+        }
+        
+        /* Block type colors */
+        .block-type-setup { background-color: #7c3aed; }
+        .block-type-loop { background-color: #059669; }
+        .block-type-pinMode { background-color: #2563eb; }
+        .block-type-digitalWrite { background-color: #16a34a; }
+        .block-type-digitalRead { background-color: #d97706; }
+        .block-type-analogRead { background-color: #ea580c; }
+        .block-type-analogWrite { background-color: #9333ea; }
+        .block-type-delay { background-color: #ef4444; }
+        .block-type-serialBegin { background-color: #4f46e5; }
+        .block-type-serialPrintln { background-color: #0891b2; }
+        .block-type-comment { background-color: #64748b; }
+        .block-type-variableDeclaration { background-color: #9333ea; }
+        .block-type-ifStatement { background-color: #c026d3; }
+        .block-type-endIf { background-color: #a16207; }
+        .block-type-functionCall { background-color: #047857; }
+        
+        /* Message box styles */
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            max-width: 400px;
+            width: 90%;
+            display: none;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .message-box h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+        }
+        
+        .message-box p {
+            margin-bottom: 1.5rem;
+            color: #475569;
+            line-height: 1.5;
+        }
+        
+        .message-box button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            float: right;
+        }
+        
+        .message-box button:hover {
+            background-color: #4338ca;
+        }
+        
+        /* Tooltip styles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #1e293b;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 0.5rem;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.875rem;
+            font-weight: normal;
+        }
+        
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 1024px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .block-palette, .code-output-container {
+                width: auto;
+                margin: 0.5rem;
+            }
+            
+            .workspace-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-gray-50">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl md:text-3xl font-bold flex items-center">
+                <i class="fas fa-microchip mr-3"></i>
+                Arduino Block Code Generator
+            </h1>
+            <div class="flex items-center space-x-2">
+                <span class="text-sm hidden md:block">Drag & Drop Interface</span>
+                <i class="fas fa-arrows-alt text-yellow-300"></i>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-hidden container mx-auto p-2 md:p-4">
+        <div class="flex flex-col lg:flex-row h-full gap-4">
+            <!-- Left Column: Block Palette -->
+            <div class="block-palette">
+                <h2 class="text-lg font-semibold mb-4 flex items-center text-gray-700">
+                    <i class="fas fa-shapes mr-2"></i>
+                    Code Blocks
+                </h2>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Core Functions</h3>
+                    <div class="space-y-2">
+                        <!-- Setup Block -->
+                        <div class="draggable-block block-type-setup" data-type="setup" draggable="true">
+                            <span><i class="fas fa-cog mr-2"></i>Setup Function</span>
+                            <div class="tooltip">
+                                <i class="fas fa-info-circle opacity-70"></i>
+                                <span class="tooltip-text">Initialization code that runs once when the Arduino starts</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Loop Block -->
+                        <div class="draggable-block block-type-loop" data-type="loop" draggable="true">
+                            <span><i class="fas fa-redo mr-2"></i>Loop Function</span>
+                            <div class="tooltip">
+                                <i class="fas fa-info-circle opacity-70"></i>
+                                <span class="tooltip-text">Main program code that runs repeatedly</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Digital I/O</h3>
+                    <div class="space-y-2">
+                        <!-- pinMode Block -->
+                        <div class="draggable-block block-type-pinMode" data-type="pinMode" draggable="true">
+                            <span><i class="fas fa-plug mr-2"></i>Pin Mode</span>
+                        </div>
+                        
+                        <!-- digitalWrite Block -->
+                        <div class="draggable-block block-type-digitalWrite" data-type="digitalWrite" draggable="true">
+                            <span><i class="fas fa-bolt mr-2"></i>Digital Write</span>
+                        </div>
+                        
+                        <!-- digitalRead Block -->
+                        <div class="draggable-block block-type-digitalRead" data-type="digitalRead" draggable="true">
+                            <span><i class="fas fa-search mr-2"></i>Digital Read</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Analog I/O</h3>
+                    <div class="space-y-2">
+                        <!-- analogRead Block -->
+                        <div class="draggable-block block-type-analogRead" data-type="analogRead" draggable="true">
+                            <span><i class="fas fa-wave-square mr-2"></i>Analog Read</span>
+                        </div>
+                        
+                        <!-- analogWrite Block (PWM) -->
+                        <div class="draggable-block block-type-analogWrite" data-type="analogWrite" draggable="true">
+                            <span><i class="fas fa-sliders-h mr-2"></i>Analog Write (PWM)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Timing</h3>
+                    <div class="space-y-2">
+                        <!-- delay Block -->
+                        <div class="draggable-block block-type-delay" data-type="delay" draggable="true">
+                            <span><i class="fas fa-clock mr-2"></i>Delay (ms)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Serial Communication</h3>
+                    <div class="space-y-2">
+                        <!-- Serial.begin Block -->
+                        <div class="draggable-block block-type-serialBegin" data-type="serialBegin" draggable="true">
+                            <span><i class="fas fa-terminal mr-2"></i>Serial Begin</span>
+                        </div>
+                        
+                        <!-- Serial.println Block -->
+                        <div class="draggable-block block-type-serialPrintln" data-type="serialPrintln" draggable="true">
+                            <span><i class="fas fa-print mr-2"></i>Serial PrintLn</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2">Programming</h3>
+                    <div class="space-y-2">
+                        <!-- Comment Block -->
+                        <div class="draggable-block block-type-comment" data-type="comment" draggable="true">
+                            <span><i class="fas fa-comment mr-2"></i>Comment</span>
+                        </div>
+                        
+                        <!-- Variable Declaration Block -->
+                        <div class="draggable-block block-type-variableDeclaration" data-type="variableDeclaration" draggable="true">
+                            <span><i class="fas fa-code mr-2"></i>Declare Variable</span>
+                        </div>
+                        
+                        <!-- If Statement Block -->
+                        <div class="draggable-block block-type-ifStatement" data-type="ifStatement" draggable="true">
+                            <span><i class="fas fa-question mr-2"></i>If Statement</span>
+                        </div>
+                        
+                        <!-- End If Block -->
+                        <div class="draggable-block block-type-endIf" data-type="endIf" draggable="true">
+                            <span><i class="fas fa-braces mr-2"></i>End If</span>
+                        </div>
+                        
+                        <!-- Function Call Block -->
+                        <div class="draggable-block block-type-functionCall" data-type="functionCall" draggable="true">
+                            <span><i class="fas fa-function mr-2"></i>Call Function</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Middle Column: Workspace -->
+            <div class="flex-1 flex flex-col min-h-0">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-lg font-semibold flex items-center text-gray-700">
+                        <i class="fas fa-project-diagram mr-2"></i>
+                        Workspace
+                    </h2>
+                    <button id="clear-workspace-btn" class="text-sm bg-red-100 hover:bg-red-200 text-red-700 py-1 px-3 rounded-full flex items-center transition-colors">
+                        <i class="fas fa-trash-alt mr-1"></i> Clear
+                    </button>
+                </div>
+                
+                <div id="workspace" class="workspace flex-1 flex flex-col gap-3 bg-white">
+                    <p class="text-gray-400 text-center mt-8 flex flex-col items-center">
+                        <i class="fas fa-arrow-left text-2xl mb-2 opacity-60"></i>
+                        Drag and drop blocks here to build your Arduino program
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Right Column: Code Output -->
+            <div class="code-output-container">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-lg font-semibold flex items-center text-gray-700">
+                        <i class="fas fa-code mr-2"></i>
+                        Generated Code
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button id="generate-code-btn" class="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1 px-3 rounded-full flex items-center transition-colors">
+                            <i class="fas fa-sync-alt mr-1"></i> Generate
+                        </button>
+                        <button id="copy-code-btn" class="text-sm bg-green-100 hover:bg-green-200 text-green-700 py-1 px-3 rounded-full flex items-center transition-colors">
+                            <i class="fas fa-copy mr-1"></i> Copy
+                        </button>
+                    </div>
+                </div>
+                
+                <textarea id="arduino-code-output" class="code-output-area w-full mb-4 focus:outline-none" spellcheck="false"></textarea>
+                
+                <div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+                    <div class="font-medium flex items-center mb-1">
+                        <i class="fas fa-lightbulb mr-2"></i> Tip
+                    </div>
+                    <p>Click "Generate" to update the code after making changes. The generated code is ready to paste into the Arduino IDE.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 py-3 text-center text-sm text-gray-500">
+        <div class="container mx-auto">
+            Arduino Block Code Generator &copy; 2023 | Drag and drop interface for Arduino programming
+        </div>
+    </footer>
+
+    <!-- Custom Message Box -->
+    <div id="message-box" class="message-box">
+        <h3 id="message-title"></h3>
+        <p id="message-content"></p>
+        <button id="message-ok-btn">OK</button>
+    </div>
+
+    <script>
+        // Custom message box display function
+        function showMessageBox(title, message) {
+            const msgBox = document.getElementById('message-box');
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-content').textContent = message;
+            msgBox.style.display = 'block';
+            
+            // Add overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'message-overlay';
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.right = '0';
+            overlay.style.bottom = '0';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            overlay.style.zIndex = '99';
+            document.body.appendChild(overlay);
+            
+            const okButton = document.getElementById('message-ok-btn');
+            okButton.onclick = () => {
+                msgBox.style.display = 'none';
+                document.getElementById('message-overlay').remove();
+            };
+        }
+
+        const workspace = document.getElementById('workspace');
+        const codeOutput = document.getElementById('arduino-code-output');
+        const draggableBlocks = document.querySelectorAll('.draggable-block');
+        const generateBtn = document.getElementById('generate-code-btn');
+        const clearBtn = document.getElementById('clear-workspace-btn');
+        const copyBtn = document.getElementById('copy-code-btn');
+
+        // This array will store the block configurations in the workspace
+        let workspaceBlocks = [];
+        let blockIdCounter = 0; // Unique ID counter for each dropped block
+
+        // --- Drag & Drop Functionality ---
+
+        // Make palette blocks draggable
+        draggableBlocks.forEach(block => {
+            block.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', e.target.dataset.type);
+                // Set a custom drag image (optional, for better UX)
+                const img = new Image();
+                img.src = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'30\'%3E%3Crect width=\'100\' height=\'30\' rx=\'5\' ry=\'5\' fill=\'%234f46e5\' /%3E%3Ctext x=\'50%25\' y=\'50%25\' font-family=\'Inter\' font-size=\'14\' fill=\'white\' text-anchor=\'middle\' dominant-baseline=\'middle\'%3EBlock%3C/text%3E%3C/svg%3E';
+                e.dataTransfer.setDragImage(img, 50, 15);
+                
+                // Add visual feedback
+                e.target.style.opacity = '0.6';
+            });
+            
+            block.addEventListener('dragend', (e) => {
+                e.target.style.opacity = '1';
+            });
+        });
+
+        // Allow dropping onto the workspace
+        workspace.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Allow drop
+            workspace.classList.add('drag-over');
+        });
+
+        workspace.addEventListener('dragleave', () => {
+            workspace.classList.remove('drag-over');
+        });
+
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            workspace.classList.remove('drag-over');
+
+            const blockType = e.dataTransfer.getData('text/plain');
+            if (blockType) {
+                addBlockToWorkspace(blockType);
+                // Remove the initial instruction text if present
+                const placeholder = workspace.querySelector('p');
+                if (placeholder && placeholder.textContent.includes('Drag and drop blocks here')) {
+                    placeholder.remove();
+                }
+            }
+        });
+
+        // --- Block Management in Workspace ---
+
+        function addBlockToWorkspace(type) {
+            const blockId = 'block-' + blockIdCounter++;
+            const blockData = { id: blockId, type: type, params: {} };
+            workspaceBlocks.push(blockData);
+
+            const blockElement = document.createElement('div');
+            blockElement.classList.add('workspace-block', 'relative', 'p-4', 'rounded-md', 'shadow', 'flex', 'flex-col', 'gap-2', 'z-10', `block-type-${type}`);
+            blockElement.setAttribute('data-id', blockId);
+            blockElement.setAttribute('draggable', true); // Make dropped blocks draggable for reordering
+
+            let contentHTML = `<span class="font-semibold text-lg capitalize flex items-center">${getBlockIcon(type)}${type.replace(/([A-Z])/g, ' $1').trim()}</span>`;
+            let inputHTML = '';
+            let defaultParams = {};
+
+            switch (type) {
+                case 'setup':
+                    contentHTML = `<span class="font-bold text-xl text-purple-100 flex items-center">${getBlockIcon(type)}void setup() {</span>`;
+                    inputHTML = `<span class="text-xs text-gray-200 italic">Code inside setup runs once when the program starts</span>`;
+                    break;
+                case 'loop':
+                    contentHTML = `<span class="font-bold text-xl text-teal-100 flex items-center">${getBlockIcon(type)}void loop() {</span>`;
+                    inputHTML = `<span class="text-xs text-gray-200 italic">Code inside loop runs repeatedly</span>`;
+                    break;
+                case 'pinMode':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-pin">Pin:</label>
+                            <input type="number" id="${blockId}-pin" value="2" min="0" max="13" class="w-20">
+                            <label for="${blockId}-mode">Mode:</label>
+                            <select id="${blockId}-mode" class="w-24">
+                                <option value="OUTPUT">OUTPUT</option>
+                                <option value="INPUT">INPUT</option>
+                                <option value="INPUT_PULLUP">INPUT_PULLUP</option>
+                            </select>
+                        </div>
+                    `;
+                    defaultParams = { pin: 2, mode: 'OUTPUT' };
+                    break;
+                case 'digitalWrite':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-pin">Pin:</label>
+                            <input type="number" id="${blockId}-pin" value="2" min="0" max="13" class="w-20">
+                            <label for="${blockId}-value">Value:</label>
+                            <select id="${blockId}-value" class="w-20">
+                                <option value="HIGH">HIGH</option>
+                                <option value="LOW">LOW</option>
+                            </select>
+                        </div>
+                    `;
+                    defaultParams = { pin: 2, value: 'HIGH' };
+                    break;
+                case 'digitalRead':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-pin">Pin:</label>
+                            <input type="number" id="${blockId}-pin" value="2" min="0" max="13" class="w-20">
+                        </div>
+                        <span class="text-xs text-gray-200 italic">Returns HIGH or LOW</span>
+                    `;
+                    defaultParams = { pin: 2 };
+                    break;
+                case 'analogRead':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-pin">Analog Pin (A0-A5):</label>
+                            <input type="number" id="${blockId}-pin" value="0" min="0" max="5" class="w-20">
+                        </div>
+                        <span class="text-xs text-gray-200 italic">Returns 0-1023</span>
+                    `;
+                    defaultParams = { pin: 0 };
+                    break;
+                case 'analogWrite':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-pin">PWM Pin:</label>
+                            <input type="number" id="${blockId}-pin" value="3" min="3" max="11" class="w-20">
+                            <label for="${blockId}-value">Value (0-255):</label>
+                            <input type="number" id="${blockId}-value" value="128" min="0" max="255" class="w-20">
+                        </div>
+                        <span class="text-xs text-gray-200 italic">For PWM pins (3, 5, 6, 9, 10, 11)</span>
+                    `;
+                    defaultParams = { pin: 3, value: 128 };
+                    break;
+                case 'delay':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-ms">Milliseconds:</label>
+                            <input type="number" id="${blockId}-ms" value="1000" min="0" class="w-20">
+                        </div>
+                    `;
+                    defaultParams = { ms: 1000 };
+                    break;
+                case 'serialBegin':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-baud">Baud Rate:</label>
+                            <input type="number" id="${blockId}-baud" value="9600" min="0" class="w-24">
+                        </div>
+                    `;
+                    defaultParams = { baud: 9600 };
+                    break;
+                case 'serialPrintln':
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-message">Message:</label>
+                            <input type="text" id="${blockId}-message" value="Hello Arduino!" class="w-full">
+                        </div>
+                    `;
+                    defaultParams = { message: 'Hello Arduino!' };
+                    break;
+                case 'comment':
+                    contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(type)}Comment</span>`;
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-text">Text:</label>
+                            <input type="text" id="${blockId}-text" value="My comment here" class="w-full">
+                        </div>
+                    `;
+                    defaultParams = { text: 'My comment here' };
+                    break;
+                case 'variableDeclaration':
+                    contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(type)}Declare Variable</span>`;
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-varType">Type:</label>
+                            <select id="${blockId}-varType" class="w-20">
+                                <option value="int">int</option>
+                                <option value="float">float</option>
+                                <option value="bool">bool</option>
+                            </select>
+                            <label for="${blockId}-varName">Name:</label>
+                            <input type="text" id="${blockId}-varName" value="myVar" class="w-24">
+                            <label for="${blockId}-initialValue">Value:</label>
+                            <input type="text" id="${blockId}-initialValue" value="0" class="w-20">
+                        </div>
+                    `;
+                    defaultParams = { varType: 'int', varName: 'myVar', initialValue: '0' };
+                    break;
+                case 'ifStatement':
+                    contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(type)}If Statement</span>`;
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-condition">Condition:</label>
+                            <input type="text" id="${blockId}-condition" value="digitalRead(2) == HIGH" class="w-full">
+                        </div>
+                        <span class="text-xs text-gray-200 italic">Example: digitalRead(2) == HIGH</span>
+                    `;
+                    defaultParams = { condition: 'digitalRead(2) == HIGH' };
+                    break;
+                case 'endIf':
+                    contentHTML = `<span class="font-bold text-xl text-amber-100 flex items-center">${getBlockIcon(type)}} (End If)</span>`;
+                    inputHTML = `<span class="text-xs text-gray-200 italic">Closes the last 'If Statement'</span>`;
+                    break;
+                case 'functionCall':
+                    contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(type)}Call Function</span>`;
+                    inputHTML = `
+                        <div class="input-group">
+                            <label for="${blockId}-functionName">Name:</label>
+                            <input type="text" id="${blockId}-functionName" value="myCustomFunction" class="w-full">
+                        </div>
+                    `;
+                    defaultParams = { functionName: 'myCustomFunction' };
+                    break;
+            }
+
+            blockElement.innerHTML = `
+                ${contentHTML}
+                ${inputHTML}
+                <button class="remove-btn" title="Remove Block"><i class="fas fa-times"></i></button>
+            `;
+
+            // Update the blockData with default parameters
+            blockData.params = { ...defaultParams };
+
+            // Add event listeners to input fields to update blockData
+            const inputs = blockElement.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const paramName = e.target.id.replace(blockId + '-', '');
+                    let value = e.target.value;
+                    if (e.target.type === 'number' && paramName !== 'initialValue') { // initialValue can be text (e.g. "true")
+                        value = parseInt(value, 10);
+                    }
+                    const blockIndex = workspaceBlocks.findIndex(b => b.id === blockId);
+                    if (blockIndex !== -1) {
+                        workspaceBlocks[blockIndex].params[paramName] = value;
+                    }
+                    generateArduinoCode(); // Regenerate code on input change
+                });
+            });
+
+            // Add remove button functionality
+            const removeBtn = blockElement.querySelector('.remove-btn');
+            removeBtn.addEventListener('click', () => {
+                removeBlockFromWorkspace(blockId);
+                generateArduinoCode(); // Regenerate code after removal
+            });
+
+            workspace.appendChild(blockElement);
+            generateArduinoCode(); // Regenerate code after adding a new block
+        }
+
+        function getBlockIcon(type) {
+            const icons = {
+                'setup': '<i class="fas fa-cog mr-2"></i>',
+                'loop': '<i class="fas fa-redo mr-2"></i>',
+                'pinMode': '<i class="fas fa-plug mr-2"></i>',
+                'digitalWrite': '<i class="fas fa-bolt mr-2"></i>',
+                'digitalRead': '<i class="fas fa-search mr-2"></i>',
+                'analogRead': '<i class="fas fa-wave-square mr-2"></i>',
+                'analogWrite': '<i class="fas fa-sliders-h mr-2"></i>',
+                'delay': '<i class="fas fa-clock mr-2"></i>',
+                'serialBegin': '<i class="fas fa-terminal mr-2"></i>',
+                'serialPrintln': '<i class="fas fa-print mr-2"></i>',
+                'comment': '<i class="fas fa-comment mr-2"></i>',
+                'variableDeclaration': '<i class="fas fa-code mr-2"></i>',
+                'ifStatement': '<i class="fas fa-question mr-2"></i>',
+                'endIf': '<i class="fas fa-braces mr-2"></i>',
+                'functionCall': '<i class="fas fa-function mr-2"></i>'
+            };
+            return icons[type] || '';
+        }
+
+        function removeBlockFromWorkspace(id) {
+            const blockElement = document.querySelector(`.workspace-block[data-id="${id}"]`);
+            if (blockElement) {
+                blockElement.remove();
+                workspaceBlocks = workspaceBlocks.filter(block => block.id !== id);
+            }
+            if (workspaceBlocks.length === 0) {
+                 workspace.innerHTML = `<p class="text-gray-400 text-center mt-8 flex flex-col items-center">
+                    <i class="fas fa-arrow-left text-2xl mb-2 opacity-60"></i>
+                    Drag and drop blocks here to build your Arduino program
+                </p>`;
+            }
+        }
+
+        // --- Reordering Dropped Blocks ---
+        let draggedBlock = null;
+
+        workspace.addEventListener('dragstart', (e) => {
+            if (e.target.classList.contains('workspace-block')) {
+                draggedBlock = e.target;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', e.target.dataset.id);
+                setTimeout(() => {
+                    e.target.style.opacity = '0.5'; // Hide original while dragging
+                }, 0);
+            }
+        });
+
+        workspace.addEventListener('dragend', (e) => {
+            if (draggedBlock) {
+                draggedBlock.style.opacity = '1'; // Restore opacity
+                draggedBlock = null;
+            }
+            generateArduinoCode(); // Regenerate code after reordering
+        });
+
+        workspace.addEventListener('dragenter', (e) => {
+            e.preventDefault(); // Necessary to allow drop
+            const targetElement = e.target.closest('.workspace-block');
+            if (draggedBlock && targetElement && targetElement !== draggedBlock) {
+                // Remove any existing drag indicators
+                workspace.querySelectorAll('.workspace-block').forEach(el => {
+                    el.classList.remove('drag-over-item', 'top', 'bottom');
+                });
+                
+                // Add class to indicate this is a drop target
+                targetElement.classList.add('drag-over-item');
+                
+                // Determine if we're over the top or bottom half
+                const bounding = targetElement.getBoundingClientRect();
+                const offset = e.clientY - bounding.top;
+                if (offset < bounding.height / 2) {
+                    targetElement.classList.add('top');
+                } else {
+                    targetElement.classList.add('bottom');
+                }
+            }
+        });
+
+        workspace.addEventListener('dragleave', (e) => {
+            if (e.target.classList.contains('workspace-block')) {
+                e.target.classList.remove('drag-over-item', 'top', 'bottom');
+            }
+        });
+
+        workspace.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const targetElement = e.target.closest('.workspace-block');
+            if (draggedBlock && targetElement && targetElement !== draggedBlock) {
+                // Update the position indicator based on mouse position
+                const bounding = targetElement.getBoundingClientRect();
+                const offset = e.clientY - bounding.top;
+                
+                // Remove all position classes first
+                targetElement.classList.remove('top', 'bottom');
+                
+                // Add the appropriate class
+                if (offset < bounding.height / 2) {
+                    targetElement.classList.add('top');
+                } else {
+                    targetElement.classList.add('bottom');
+                }
+            }
+        });
+
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const targetElement = e.target.closest('.workspace-block');
+            
+            // Clear all drag indicators
+            workspace.querySelectorAll('.workspace-block').forEach(block => {
+                block.classList.remove('drag-over-item', 'top', 'bottom');
+            });
+
+            if (draggedBlock && targetElement && targetElement !== draggedBlock) {
+                const draggedId = draggedBlock.dataset.id;
+                const targetId = targetElement.dataset.id;
+
+                const draggedIndex = workspaceBlocks.findIndex(b => b.id === draggedId);
+                const targetIndex = workspaceBlocks.findIndex(b => b.id === targetId);
+
+                if (draggedIndex !== -1 && targetIndex !== -1) {
+                    const bounding = targetElement.getBoundingClientRect();
+                    const offset = e.clientY - bounding.top;
+
+                    const [removed] = workspaceBlocks.splice(draggedIndex, 1); // Remove dragged block
+                    if (offset < bounding.height / 2) {
+                        workspaceBlocks.splice(targetIndex, 0, removed); // Insert before target
+                    } else {
+                        workspaceBlocks.splice(targetIndex + 1, 0, removed); // Insert after target
+                    }
+
+                    // Re-render the workspace to reflect the new order
+                    renderWorkspace();
+                }
+            } else if (!targetElement && draggedBlock) {
+                // Dropped onto empty space in workspace, if it was a palette drag, add new block
+                // If it was a reorder drag from within workspace to empty space, append to end
+                if (!workspaceBlocks.some(b => b.id === draggedBlock.dataset.id)) {
+                    // This case is already handled by the primary drop event on workspace
+                    // for blocks coming from the palette.
+                } else {
+                    // This means a block was dragged from the workspace itself to empty space
+                    // We need to re-add it to the end of the array if it was removed due to reordering logic
+                    const draggedId = draggedBlock.dataset.id;
+                    const blockData = workspaceBlocks.find(b => b.id === draggedId);
+                    if (!blockData) { // If it was removed by splice (meaning it was being reordered)
+                        // It means it's already in the array, no need to re-add, just re-render
+                    }
+                     renderWorkspace(); // Ensure consistent state
+                }
+            }
+            generateArduinoCode(); // Regenerate code after dropping/reordering
+        });
+
+        function renderWorkspace() {
+            workspace.innerHTML = ''; // Clear current display
+            if (workspaceBlocks.length === 0) {
+                 workspace.innerHTML = `<p class="text-gray-400 text-center mt-8 flex flex-col items-center">
+                    <i class="fas fa-arrow-left text-2xl mb-2 opacity-60"></i>
+                    Drag and drop blocks here to build your Arduino program
+                </p>`;
+            }
+
+            workspaceBlocks.forEach(blockData => {
+                const blockElement = document.createElement('div');
+                blockElement.classList.add('workspace-block', 'relative', 'p-4', 'rounded-md', 'shadow', 'flex', 'flex-col', 'gap-2', 'z-10', `block-type-${blockData.type}`);
+                blockElement.setAttribute('data-id', blockData.id);
+                blockElement.setAttribute('draggable', true);
+
+                let contentHTML = `<span class="font-semibold text-lg capitalize flex items-center">${getBlockIcon(blockData.type)}${blockData.type.replace(/([A-Z])/g, ' $1').trim()}</span>`;
+                let inputHTML = '';
+
+                // Re-create input fields based on block type and existing params
+                switch (blockData.type) {
+                    case 'setup':
+                        contentHTML = `<span class="font-bold text-xl text-purple-100 flex items-center">${getBlockIcon(blockData.type)}void setup() {</span>`;
+                        inputHTML = `<span class="text-xs text-gray-200 italic">Code inside setup runs once when the program starts</span>`;
+                        break;
+                    case 'loop':
+                        contentHTML = `<span class="font-bold text-xl text-teal-100 flex items-center">${getBlockIcon(blockData.type)}void loop() {</span>`;
+                        inputHTML = `<span class="text-xs text-gray-200 italic">Code inside loop runs repeatedly</span>`;
+                        break;
+                    case 'pinMode':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-pin">Pin:</label>
+                                <input type="number" id="${blockData.id}-pin" value="${blockData.params.pin}" min="0" max="13" class="w-20">
+                                <label for="${blockData.id}-mode">Mode:</label>
+                                <select id="${blockData.id}-mode" class="w-24">
+                                    <option value="OUTPUT" ${blockData.params.mode === 'OUTPUT' ? 'selected' : ''}>OUTPUT</option>
+                                    <option value="INPUT" ${blockData.params.mode === 'INPUT' ? 'selected' : ''}>INPUT</option>
+                                    <option value="INPUT_PULLUP" ${blockData.params.mode === 'INPUT_PULLUP' ? 'selected' : ''}>INPUT_PULLUP</option>
+                                </select>
+                            </div>
+                        `;
+                        break;
+                    case 'digitalWrite':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-pin">Pin:</label>
+                                <input type="number" id="${blockData.id}-pin" value="${blockData.params.pin}" min="0" max="13" class="w-20">
+                                <label for="${blockData.id}-value">Value:</label>
+                                <select id="${blockData.id}-value" class="w-20">
+                                    <option value="HIGH" ${blockData.params.value === 'HIGH' ? 'selected' : ''}>HIGH</option>
+                                    <option value="LOW" ${blockData.params.value === 'LOW' ? 'selected' : ''}>LOW</option>
+                                </select>
+                            </div>
+                        `;
+                        break;
+                    case 'digitalRead':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-pin">Pin:</label>
+                                <input type="number" id="${blockData.id}-pin" value="${blockData.params.pin}" min="0" max="13" class="w-20">
+                            </div>
+                            <span class="text-xs text-gray-200 italic">Returns HIGH or LOW</span>
+                        `;
+                        break;
+                    case 'analogRead':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-pin">Analog Pin (A0-A5):</label>
+                                <input type="number" id="${blockData.id}-pin" value="${blockData.params.pin}" min="0" max="5" class="w-20">
+                            </div>
+                            <span class="text-xs text-gray-200 italic">Returns 0-1023</span>
+                        `;
+                        break;
+                    case 'analogWrite':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-pin">PWM Pin:</label>
+                                <input type="number" id="${blockData.id}-pin" value="${blockData.params.pin}" min="3" max="11" class="w-20">
+                                <label for="${blockData.id}-value">Value (0-255):</label>
+                                <input type="number" id="${blockData.id}-value" value="${blockData.params.value}" min="0" max="255" class="w-20">
+                            </div>
+                            <span class="text-xs text-gray-200 italic">For PWM pins (3, 5, 6, 9, 10, 11)</span>
+                        `;
+                        break;
+                    case 'delay':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-ms">Milliseconds:</label>
+                                <input type="number" id="${blockData.id}-ms" value="${blockData.params.ms}" min="0" class="w-20">
+                            </div>
+                        `;
+                        break;
+                    case 'serialBegin':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-baud">Baud Rate:</label>
+                                <input type="number" id="${blockData.id}-baud" value="${blockData.params.baud}" min="0" class="w-24">
+                            </div>
+                        `;
+                        break;
+                    case 'serialPrintln':
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-message">Message:</label>
+                                <input type="text" id="${blockData.id}-message" value="${blockData.params.message}" class="w-full">
+                            </div>
+                        `;
+                        break;
+                    case 'comment':
+                        contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(blockData.type)}Comment</span>`;
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-text">Text:</label>
+                                <input type="text" id="${blockData.id}-text" value="${blockData.params.text}" class="w-full">
+                            </div>
+                        `;
+                        break;
+                    case 'variableDeclaration':
+                        contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(blockData.type)}Declare Variable</span>`;
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-varType">Type:</label>
+                                <select id="${blockData.id}-varType" class="w-20">
+                                    <option value="int" ${blockData.params.varType === 'int' ? 'selected' : ''}>int</option>
+                                    <option value="float" ${blockData.params.varType === 'float' ? 'selected' : ''}>float</option>
+                                    <option value="bool" ${blockData.params.varType === 'bool' ? 'selected' : ''}>bool</option>
+                                </select>
+                                <label for="${blockData.id}-varName">Name:</label>
+                                <input type="text" id="${blockData.id}-varName" value="${blockData.params.varName}" class="w-24">
+                                <label for="${blockData.id}-initialValue">Value:</label>
+                                <input type="text" id="${blockData.id}-initialValue" value="${blockData.params.initialValue}" class="w-20">
+                            </div>
+                        `;
+                        break;
+                    case 'ifStatement':
+                        contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(blockData.type)}If Statement</span>`;
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-condition">Condition:</label>
+                                <input type="text" id="${blockData.id}-condition" value="${blockData.params.condition}" class="w-full">
+                            </div>
+                            <span class="text-xs text-gray-200 italic">Example: digitalRead(2) == HIGH</span>
+                        `;
+                        break;
+                    case 'endIf':
+                        contentHTML = `<span class="font-bold text-xl text-amber-100 flex items-center">${getBlockIcon(blockData.type)}} (End If)</span>`;
+                        inputHTML = `<span class="text-xs text-gray-200 italic">Closes the last 'If Statement'</span>`;
+                        break;
+                    case 'functionCall':
+                        contentHTML = `<span class="font-semibold text-lg flex items-center">${getBlockIcon(blockData.type)}Call Function</span>`;
+                        inputHTML = `
+                            <div class="input-group">
+                                <label for="${blockData.id}-functionName">Name:</label>
+                                <input type="text" id="${blockData.id}-functionName" value="${blockData.params.functionName}" class="w-full">
+                            </div>
+                        `;
+                        break;
+                }
+
+                blockElement.innerHTML = `
+                    ${contentHTML}
+                    ${inputHTML}
+                    <button class="remove-btn" title="Remove Block"><i class="fas fa-times"></i></button>
+                `;
+
+                // Add event listeners to input fields to update blockData
+                const inputs = blockElement.querySelectorAll('input, select');
+                inputs.forEach(input => {
+                    input.addEventListener('change', (e) => {
+                        const paramName = e.target.id.replace(blockData.id + '-', '');
+                        let value = e.target.value;
+                        if (e.target.type === 'number' && paramName !== 'initialValue') { // initialValue can be text (e.g. "true")
+                            value = parseInt(value, 10);
+                        }
+                        const blockIndex = workspaceBlocks.findIndex(b => b.id === blockData.id);
+                        if (blockIndex !== -1) {
+                            workspaceBlocks[blockIndex].params[paramName] = value;
+                        }
+                        generateArduinoCode();
+                    });
+                });
+
+                // Add remove button functionality
+                const removeBtn = blockElement.querySelector('.remove-btn');
+                removeBtn.addEventListener('click', () => {
+                    removeBlockFromWorkspace(blockData.id);
+                    generateArduinoCode();
+                });
+
+                workspace.appendChild(blockElement);
+            });
+        }
+
+        // --- Code Generation ---
+
+        generateBtn.addEventListener('click', () => {
+            generateArduinoCode();
+            showMessageBox("Code Generated", "Your Arduino code has been successfully generated and is ready to copy!");
+        });
+
+        function generateArduinoCode() {
+            let globalDeclarations = [];
+            let setupLines = [];
+            let loopLines = [];
+
+            let currentTargetArray = null; // Points to setupLines or loopLines
+            let currentIndentLevel = 0;
+
+            // Helper to append code lines with current indentation
+            const appendCodeLine = (line) => {
+                if (currentTargetArray) {
+                    currentTargetArray.push('  '.repeat(currentIndentLevel) + line);
+                }
+            };
+
+            for (let i = 0; i < workspaceBlocks.length; i++) {
+                const block = workspaceBlocks[i];
+                const params = block.params;
+
+                if (block.type === 'setup') {
+                    currentTargetArray = setupLines;
+                    currentIndentLevel = 1; // Start with 1 indent for content inside setup()
+                    continue; // Skip processing the setup block itself
+                } else if (block.type === 'loop') {
+                    currentTargetArray = loopLines;
+                    currentIndentLevel = 1; // Start with 1 indent for content inside loop()
+                    continue; // Skip processing the loop block itself
+                }
+
+                switch (block.type) {
+                    case 'comment':
+                        appendCodeLine(`// ${params.text}`);
+                        break;
+                    case 'variableDeclaration':
+                        // Variables are typically declared globally or within a function.
+                        // For simplicity in this flat block system, we'll declare them globally.
+                        const declaration = `${params.varType} ${params.varName} = ${params.initialValue};`;
+                        if (!globalDeclarations.includes(declaration)) { // Prevent duplicates
+                            globalDeclarations.push(declaration);
+                        }
+                        break; // Do not add to setup/loop content, it's global
+                    case 'pinMode':
+                        appendCodeLine(`pinMode(${params.pin}, ${params.mode});`);
+                        break;
+                    case 'digitalWrite':
+                        appendCodeLine(`digitalWrite(${params.pin}, ${params.value});`);
+                        break;
+                    case 'digitalRead':
+                        appendCodeLine(`// int value = digitalRead(${params.pin}); // Read digital pin`);
+                        break;
+                    case 'analogRead':
+                        appendCodeLine(`// int value = analogRead(A${params.pin}); // Read analog pin`);
+                        break;
+                    case 'analogWrite':
+                        appendCodeLine(`analogWrite(${params.pin}, ${params.value});`);
+                        break;
+                    case 'delay':
+                        appendCodeLine(`delay(${params.ms});`);
+                        break;
+                    case 'serialBegin':
+                        appendCodeLine(`Serial.begin(${params.baud});`);
+                        break;
+                    case 'serialPrintln':
+                        appendCodeLine(`Serial.println("${params.message}");`);
+                        break;
+                    case 'ifStatement':
+                        appendCodeLine(`if (${params.condition}) {`);
+                        currentIndentLevel++; // Increase indent for blocks inside 'if'
+                        break;
+                    case 'endIf':
+                        if (currentIndentLevel > 1) { // Ensure we don't un-indent below function level
+                            currentIndentLevel--;
+                        }
+                        appendCodeLine(`}`);
+                        break;
+                    case 'functionCall':
+                        appendCodeLine(`${params.functionName}();`);
+                        break;
+                    default:
+                        appendCodeLine(`// Unknown block type: ${block.type}`);
+                        break;
+                }
+            }
+
+            // Construct the final code string
+            let finalCode = '';
+
+            // Add global declarations at the very top
+            if (globalDeclarations.length > 0) {
+                finalCode += globalDeclarations.join('\n') + '\n\n';
+            }
+
+            // Assemble setup() function
+            finalCode += `void setup() {\n`;
+            if (setupLines.length === 0) {
+                finalCode += `  // Add setup blocks here\n`;
+            } else {
+                finalCode += setupLines.join('\n') + '\n';
+            }
+            finalCode += `}\n\n`;
+
+            // Assemble loop() function
+            finalCode += `void loop() {\n`;
+            if (loopLines.length === 0) {
+                finalCode += `  // Add loop blocks here\n`;
+            } else {
+                finalCode += loopLines.join('\n') + '\n';
+            }
+            finalCode += `}\n`;
+
+            codeOutput.value = finalCode.trim();
+        }
+
+        // --- Control Buttons ---
+
+        clearBtn.addEventListener('click', () => {
+            if (workspaceBlocks.length > 0) {
+                if (confirm("Are you sure you want to clear the workspace? All blocks will be removed.")) {
+                    workspaceBlocks = [];
+                    blockIdCounter = 0;
+                    workspace.innerHTML = `<p class="text-gray-400 text-center mt-8 flex flex-col items-center">
+                        <i class="fas fa-arrow-left text-2xl mb-2 opacity-60"></i>
+                        Drag and drop blocks here to build your Arduino program
+                    </p>`;
+                    codeOutput.value = `// Your Arduino code will appear here
+void setup() {
+  // Add setup blocks here
+}
+
+void loop() {
+  // Add loop blocks here
+}`;
+                }
+            }
+        });
+
+        copyBtn.addEventListener('click', () => {
+            if (codeOutput.value.trim() === '') {
+                showMessageBox("Copy Error", "There's no code to copy yet!");
+                return;
+            }
+            codeOutput.select(); // Select the text area content
+            try {
+                document.execCommand('copy'); // Execute copy command
+                showMessageBox("Success", "Arduino code copied to clipboard!");
+            } catch (err) {
+                showMessageBox("Copy Error", "Failed to copy code. Please copy manually.");
+                console.error('Copy failed:', err);
+            }
+        });
+
+        // Initialize code output on load
+        generateArduinoCode();
+    </script>
+</body>
+</html>
